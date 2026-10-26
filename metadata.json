@@ -2,6 +2,7 @@
   "name": "Neon Vanguard: Survivor",
   "description": "High-octane 60fps arcade survival roguelite with real-time competitive leaderboards, player telemetry, and a dedicated admin command dashboard.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }
-

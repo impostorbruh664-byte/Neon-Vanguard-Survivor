@@ -14,6 +14,7 @@ import { PauseMenu } from './components/PauseMenu';
 import { GameOverModal } from './components/GameOverModal';
 import { LeaderboardModal } from './components/LeaderboardModal';
 import { AdminDashboard } from './components/AdminDashboard';
+import { MultiplayerModal } from './components/MultiplayerModal';
 
 export default function App() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -23,6 +24,8 @@ export default function App() {
   const [gameState, setGameState] = useState<GameState>('TITLE');
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
+  const [showMultiplayer, setShowMultiplayer] = useState(false);
+  const [multiplayerWeapon, setMultiplayerWeapon] = useState<WeaponType>('Hyper Blaster');
   const [isMuted, setIsMuted] = useState(() => sound.getMuted());
   const [callSign, setCallSign] = useState(() => {
     return localStorage.getItem('nv_callsign') || 'Vanguard-1';
@@ -109,7 +112,19 @@ export default function App() {
 
   const handleStartGame = (startingWeapon: WeaponType) => {
     if (engineRef.current) {
-      engineRef.current.startGame(startingWeapon);
+      engineRef.current.startGame(startingWeapon, false);
+    }
+  };
+
+  const handleOpenMultiplayer = (weapon: WeaponType) => {
+    setMultiplayerWeapon(weapon);
+    setShowMultiplayer(true);
+  };
+
+  const handleLaunchMultiplayerSortie = (weapon: WeaponType) => {
+    setShowMultiplayer(false);
+    if (engineRef.current) {
+      engineRef.current.startGame(weapon, true);
     }
   };
 
@@ -152,9 +167,10 @@ export default function App() {
       />
 
       {/* State: Title Screen */}
-      {gameState === 'TITLE' && !showLeaderboard && !showAdmin && (
+      {gameState === 'TITLE' && !showLeaderboard && !showAdmin && !showMultiplayer && (
         <TitleScreen
           onStart={handleStartGame}
+          onOpenMultiplayer={handleOpenMultiplayer}
           onOpenLeaderboard={() => setShowLeaderboard(true)}
           onOpenAdmin={() => setShowAdmin(true)}
           callSign={callSign}
@@ -218,6 +234,16 @@ export default function App() {
         <AdminDashboard
           onClose={() => setShowAdmin(false)}
           engine={engineRef.current}
+        />
+      )}
+
+      {/* Fleet Multiplayer Co-op Modal */}
+      {showMultiplayer && (
+        <MultiplayerModal
+          onClose={() => setShowMultiplayer(false)}
+          callSign={callSign}
+          selectedWeapon={multiplayerWeapon}
+          onLaunchSortie={handleLaunchMultiplayerSortie}
         />
       )}
     </div>

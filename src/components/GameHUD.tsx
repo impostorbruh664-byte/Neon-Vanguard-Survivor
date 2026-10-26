@@ -1,6 +1,7 @@
 import React from 'react';
-import { Shield, Zap, Pause, Volume2, VolumeX, Crosshair, Skull, Clock } from 'lucide-react';
+import { Shield, Zap, Pause, Volume2, VolumeX, Crosshair, Skull, Clock, Users } from 'lucide-react';
 import { PlayerStats } from '../game/types';
+import { mpClient } from '../game/multiplayerClient';
 
 interface GameHUDProps {
   stats: PlayerStats;
@@ -74,6 +75,17 @@ export const GameHUD: React.FC<GameHUDProps> = ({ stats, onPause, isMuted, onTog
               WAVE {stats.wave.toString().padStart(2, '0')}
             </span>
           </div>
+
+          {mpClient.currentLobby && (
+            <div className="flex items-center gap-2 mt-1.5 px-3 py-1 bg-slate-900/90 border border-cyan-500/40 rounded text-[11px] font-mono text-cyan-300 shadow-[0_0_10px_rgba(6,182,212,0.15)]">
+              <Users className="w-3 h-3 text-cyan-400" />
+              <span>SQUAD: {mpClient.currentLobby.name}</span>
+              <span className="text-slate-500">·</span>
+              <span className="text-cyan-400 font-bold">{mpClient.currentLobby.code}</span>
+              <span className="text-slate-500">·</span>
+              <span>{mpClient.currentLobby.pilots.length} PILOTS</span>
+            </div>
+          )}
         </div>
 
           {/* Top-Right: Score, Kills & Controls */}

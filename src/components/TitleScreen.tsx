@@ -1,10 +1,11 @@
 import React from 'react';
-import { Volume2, VolumeX, Trophy, ShieldAlert, Play, Crosshair } from 'lucide-react';
+import { Volume2, VolumeX, Trophy, ShieldAlert, Play, Crosshair, Users } from 'lucide-react';
 import { sound } from '../game/audio';
 import { WeaponType } from '../game/types';
 
 interface TitleScreenProps {
   onStart: (weapon: WeaponType) => void;
+  onOpenMultiplayer: (weapon: WeaponType) => void;
   onOpenLeaderboard: () => void;
   onOpenAdmin: () => void;
   callSign: string;
@@ -16,6 +17,7 @@ interface TitleScreenProps {
 
 export const TitleScreen: React.FC<TitleScreenProps> = ({
   onStart,
+  onOpenMultiplayer,
   onOpenLeaderboard,
   onOpenAdmin,
   callSign,
@@ -52,6 +54,14 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
           >
             {isMuted ? <VolumeX className="w-4 h-4 text-rose-400" /> : <Volume2 className="w-4 h-4 text-cyan-400" />}
             <span>{isMuted ? 'Muted' : 'Sound On'}</span>
+          </button>
+
+          <button
+            onClick={() => onOpenMultiplayer(selectedWeapon)}
+            className="flex items-center gap-2 px-3.5 py-1.5 text-xs font-semibold text-cyan-300 hover:text-cyan-200 bg-cyan-950/50 hover:bg-cyan-900/60 border border-cyan-500/50 rounded-md shadow-[0_0_12px_rgba(6,182,212,0.25)] transition-all"
+          >
+            <Users className="w-4 h-4 text-cyan-400" />
+            <span>Multiplayer Squads</span>
           </button>
 
           <button
@@ -171,15 +181,25 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
 
         {/* Start Game CTA */}
         <div className="flex flex-col items-center gap-3">
-          <button
-            onClick={() => onStart(selectedWeapon)}
-            className="group relative flex items-center justify-center gap-3 px-8 py-3.5 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-sm tracking-wider uppercase rounded-lg shadow-[0_0_25px_rgba(6,182,212,0.4)] transition-all transform hover:scale-[1.02] active:scale-[0.98]"
-          >
-            <Play className="w-4 h-4 fill-current transition-transform group-hover:translate-x-0.5" />
-            <span>DEPLOY VANGUARD</span>
-          </button>
+          <div className="flex flex-col sm:flex-row items-center gap-3">
+            <button
+              onClick={() => onStart(selectedWeapon)}
+              className="group relative flex items-center justify-center gap-3 px-8 py-3.5 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-sm tracking-wider uppercase rounded-lg shadow-[0_0_25px_rgba(6,182,212,0.4)] transition-all transform hover:scale-[1.02] active:scale-[0.98]"
+            >
+              <Play className="w-4 h-4 fill-current transition-transform group-hover:translate-x-0.5" />
+              <span>DEPLOY SOLO SORTIE</span>
+            </button>
+
+            <button
+              onClick={() => onOpenMultiplayer(selectedWeapon)}
+              className="group relative flex items-center justify-center gap-2.5 px-6 py-3.5 bg-slate-900/90 hover:bg-slate-800 text-cyan-300 hover:text-white border border-cyan-500/60 font-bold text-sm tracking-wider uppercase rounded-lg shadow-[0_0_20px_rgba(6,182,212,0.15)] transition-all transform hover:scale-[1.02] active:scale-[0.98]"
+            >
+              <Users className="w-4 h-4 text-cyan-400" />
+              <span>MULTIPLAYER SQUADS</span>
+            </button>
+          </div>
           <span className="text-xs font-mono text-slate-500">
-            Press <kbd className="px-1.5 py-0.5 bg-slate-800 border border-slate-700 rounded text-slate-300">Space</kbd> or <kbd className="px-1.5 py-0.5 bg-slate-800 border border-slate-700 rounded text-slate-300">Enter</kbd> to launch
+            Press <kbd className="px-1.5 py-0.5 bg-slate-800 border border-slate-700 rounded text-slate-300">Space</kbd> or <kbd className="px-1.5 py-0.5 bg-slate-800 border border-slate-700 rounded text-slate-300">Enter</kbd> to launch solo
           </span>
         </div>
       </div>

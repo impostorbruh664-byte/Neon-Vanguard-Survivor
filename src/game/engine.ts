@@ -1,5 +1,23 @@
 import { sound } from './audio';
 import { GameState, PerkOption, PlayerStats, RunSummary, WeaponType } from './types';
+import { mpClient } from './multiplayerClient';
+
+export interface RemotePilotEntity {
+  id: string;
+  callSign: string;
+  x: number;
+  y: number;
+  targetX: number;
+  targetY: number;
+  angle: number;
+  hp: number;
+  maxHp: number;
+  color: string;
+  score: number;
+  kills: number;
+  isDashing: boolean;
+  isDead: boolean;
+}
 
 interface Projectile {
   x: number;
@@ -150,6 +168,10 @@ export class NeonEngine {
   public hyperOverclock = false;
   public infiniteMagnet = false;
   public enableAdminHotkeys = true;
+
+  // Multiplayer Fleet Co-op
+  public isMultiplayer = false;
+  public remotePilots: Map<string, RemotePilotEntity> = new Map();
 
   // Entities
   private projectiles: Projectile[] = [];
@@ -305,10 +327,43 @@ export class NeonEngine {
     }
   }
 
-  public startGame(initialWeapon: WeaponType = 'Hyper Blaster') {
+  public startGame(initialWeapon: WeaponType = 'Hyper Blaster', isMultiplayer = false) {
     this.primaryWeapon = initialWeapon;
     this.secondaryWeapons.clear();
     this.activePerks.clear();
+    this.isMultiplayer = isMultiplayer;
+    this.remotePilots.clear();
+
+    if (this.isMultiplayer && mpClient.currentLobby) {
+      for (const p of mpClient.currentLobby.pilots) {
+        if (p.id !== mpClient.selfPilotId) {
+          this.remotePilots.set(p.id, {
+            id: p.id,
+            callSign: p.callSign,
+            x: this.worldWidth / 2 + (Math.random() - 0.5) * 80,
+            y: this.worldHeight / 2 + (Math.random() - 0.5) * 80,
+            targetX: this.worldWidth / 2,
+            targetY: this.worldHeight / 2,
+            angle: 0,
+            hp: p.hp || 100,
+            maxHp: p.maxHp || 100,
+            color: p.color || '#a855f7',
+            score: p.score || 0,
+            kills: p.kills || 0,
+            isDashing: false,
+            isDead: p.isDead || false
+          });
+        }
+      }
+
+      mpClient.onPilotMoved = (update) => {
+        this.updateRemotePilot(update);
+      };
+
+      mpClient.onPilotFired = (ev) => {
+        this.spawnRemoteProjectile(ev);
+      };
+    }
 
     // Reset stats
     this.px = this.worldWidth / 2;
@@ -360,6 +415,80 @@ export class NeonEngine {
     this.setState('PLAYING');
     sound.playLevelUp();
     this.publishStats();
+  }
+
+  public updateRemotePilot(update: {
+    pilotId: string;
+    x: number;
+    y: number;
+    angle: number;
+    hp: number;
+    maxHp: number;
+    score: number;
+    kills: number;
+    isDashing: boolean;
+    isDead: boolean;
+  }) {
+    const existing = this.remotePilots.get(update.pilotId);
+    if (existing) {
+      existing.targetX = update.x;
+      existing.targetY = update.y;
+      existing.angle = update.angle;
+      existing.hp = update.hp;
+      existing.maxHp = update.maxHp;
+      existing.score = update.score;
+      existing.kills = update.kills;
+      existing.isDashing = update.isDashing;
+      existing.isDead = update.isDead;
+    } else {
+      const pilotInfo = mpClient.currentLobby?.pilots.find((p) => p.id === update.pilotId);
+      this.remotePilots.set(update.pilotId, {
+        id: update.pilotId,
+        callSign: pilotInfo?.callSign || 'Vanguard-Wingman',
+        x: update.x,
+        y: update.y,
+        targetX: update.x,
+        targetY: update.y,
+        angle: update.angle,
+        hp: update.hp,
+        maxHp: update.maxHp,
+        color: pilotInfo?.color || '#a855f7',
+        score: update.score,
+        kills: update.kills,
+        isDashing: update.isDashing,
+        isDead: update.isDead
+      });
+    }
+  }
+
+  public removeRemotePilot(pilotId: string) {
+    this.remotePilots.delete(pilotId);
+  }
+
+  public spawnRemoteProjectile(ev: {
+    pilotId: string;
+    x: number;
+    y: number;
+    vx: number;
+    vy: number;
+    radius: number;
+    color: string;
+    weaponType: string;
+  }) {
+    this.projectiles.push({
+      x: ev.x,
+      y: ev.y,
+      vx: ev.vx,
+      vy: ev.vy,
+      radius: ev.radius || 4,
+      damage: 28 * this.damageMulti,
+      pierce: 1,
+      color: ev.color || '#a855f7',
+      life: 0,
+      maxLife: 1.1,
+      isEnemy: false,
+      type: ev.weaponType === 'plasma' ? 'plasma' : 'bullet'
+    });
   }
 
   public restartGame() {
@@ -885,6 +1014,34 @@ export class NeonEngine {
     // Update Player Movement
     this.updatePlayerMovement(dt);
 
+    // Update Remote Pilots (Multiplayer interpolation)
+    for (const pilot of this.remotePilots.values()) {
+      pilot.x += (pilot.targetX - pilot.x) * 0.28;
+      pilot.y += (pilot.targetY - pilot.y) * 0.28;
+      if (pilot.isDashing && Math.random() < 0.3) {
+        this.ghostTrails.push({
+          x: pilot.x,
+          y: pilot.y,
+          angle: pilot.angle,
+          alpha: 0.4
+        });
+      }
+    }
+
+    // Multiplayer Fleet Sync Broadcast
+    if (this.isMultiplayer) {
+      mpClient.sendPlayerSync(
+        this.px,
+        this.py,
+        this.pAngle,
+        this.hp,
+        this.maxHp,
+        this.score,
+        this.kills,
+        this.dashDurationTimer > 0
+      );
+    }
+
     // Update Weapons & Projectiles
     this.updateWeapons(dt);
 
@@ -1176,20 +1333,31 @@ export class NeonEngine {
   private fireBlasterBolt(angle: number, angleOffset: number) {
     const finalAngle = angle + angleOffset;
     const isCrit = this.hyperOverclock || Math.random() < this.critChance;
+    const bulletColor = this.hyperOverclock ? '#f43f5e' : isCrit ? '#fbbf24' : '#38bdf8';
+    const bulletRadius = this.hyperOverclock ? 6 : 4;
+    const startX = this.px + Math.cos(finalAngle) * 16;
+    const startY = this.py + Math.sin(finalAngle) * 16;
+    const vx = Math.cos(finalAngle) * 820;
+    const vy = Math.sin(finalAngle) * 820;
+
     this.projectiles.push({
-      x: this.px + Math.cos(finalAngle) * 16,
-      y: this.py + Math.sin(finalAngle) * 16,
-      vx: Math.cos(finalAngle) * 820,
-      vy: Math.sin(finalAngle) * 820,
-      radius: this.hyperOverclock ? 6 : 4,
+      x: startX,
+      y: startY,
+      vx,
+      vy,
+      radius: bulletRadius,
       damage: 32 * this.damageMulti * (this.hyperOverclock ? 3.0 : 1.0) * (isCrit ? 2.0 : 1.0),
       pierce: this.hyperOverclock ? 3 : 1,
-      color: this.hyperOverclock ? '#f43f5e' : isCrit ? '#fbbf24' : '#38bdf8',
+      color: bulletColor,
       life: 0,
       maxLife: 1.1,
       isEnemy: false,
       type: 'bullet'
     });
+
+    if (this.isMultiplayer) {
+      mpClient.sendPlayerFire(startX, startY, vx, vy, bulletRadius, bulletColor, 'blaster');
+    }
   }
 
   private detonatePlasma(x: number, y: number, damage: number) {
@@ -1808,6 +1976,11 @@ export class NeonEngine {
       this.renderOrbitals();
     }
 
+    // Remote Wingmen & Squadmates
+    if (this.remotePilots.size > 0) {
+      this.renderRemotePilots();
+    }
+
     // Player Ship
     this.renderPlayer();
 
@@ -1930,6 +2103,82 @@ export class NeonEngine {
     ctx.fillRect(-2, 9, 8, 2);
 
     ctx.restore();
+  }
+
+  private renderRemotePilots() {
+    const { ctx } = this;
+    for (const pilot of this.remotePilots.values()) {
+      if (pilot.isDead) continue;
+
+      ctx.save();
+      ctx.translate(pilot.x, pilot.y);
+      ctx.rotate(pilot.angle);
+
+      // Dash ghost / shield if dashing
+      if (pilot.isDashing) {
+        ctx.beginPath();
+        ctx.arc(0, 0, this.pRadius + 6, 0, Math.PI * 2);
+        ctx.strokeStyle = pilot.color;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+
+      // Ship Hull (Sleek Vanguard Fighter)
+      ctx.beginPath();
+      ctx.moveTo(18, 0); // Nose
+      ctx.lineTo(-12, -12); // Left wing
+      ctx.lineTo(-6, 0); // Rear thruster notch
+      ctx.lineTo(-12, 12); // Right wing
+      ctx.closePath();
+
+      ctx.fillStyle = '#0f172a';
+      ctx.fill();
+
+      ctx.strokeStyle = pilot.color;
+      ctx.lineWidth = 2.2;
+      ctx.stroke();
+
+      // Cockpit glowing core
+      ctx.beginPath();
+      ctx.arc(2, 0, 3, 0, Math.PI * 2);
+      ctx.fillStyle = pilot.color;
+      ctx.fill();
+
+      // Wing cannons
+      ctx.fillStyle = pilot.color;
+      ctx.fillRect(-2, -11, 7, 1.8);
+      ctx.fillRect(-2, 9, 7, 1.8);
+
+      ctx.restore();
+
+      // Floating Call-sign and Mini Health Bar
+      ctx.save();
+      ctx.translate(pilot.x, pilot.y - 24);
+
+      // Label background
+      ctx.font = 'bold 10px "JetBrains Mono", monospace';
+      ctx.textAlign = 'center';
+      const textWidth = ctx.measureText(pilot.callSign).width;
+
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+      ctx.fillRect(-textWidth / 2 - 4, -12, textWidth + 8, 14);
+      ctx.strokeStyle = pilot.color;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(-textWidth / 2 - 4, -12, textWidth + 8, 14);
+
+      ctx.fillStyle = '#f8fafc';
+      ctx.fillText(pilot.callSign, 0, -2);
+
+      // Mini Health Bar
+      const hpWidth = 32;
+      const hpRatio = Math.max(0, Math.min(1, pilot.hp / pilot.maxHp));
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.8)';
+      ctx.fillRect(-hpWidth / 2, 4, hpWidth, 3);
+      ctx.fillStyle = hpRatio > 0.4 ? '#10b981' : '#f43f5e';
+      ctx.fillRect(-hpWidth / 2, 4, hpWidth * hpRatio, 3);
+
+      ctx.restore();
+    }
   }
 
   private renderGhostTrails() {

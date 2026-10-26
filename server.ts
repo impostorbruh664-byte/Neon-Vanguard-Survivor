@@ -1,6 +1,8 @@
 import express from 'express';
+import http from 'http';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
+import { setupMultiplayer, lobbies, generateRoomCode } from './src/server/multiplayer';
 
 const app = express();
 const PORT = 3000;
@@ -827,6 +829,51 @@ app.get('/api/admin/logs', checkAdminAuth, (req, res) => {
   res.json({ logs });
 });
 
+// 12. Multiplayer Lobbies API
+app.get('/api/lobbies', (req, res) => {
+  const publicList = Array.from(lobbies.values())
+    .filter(l => !l.isPrivate && l.state === 'waiting')
+    .map(l => ({
+      id: l.id,
+      code: l.code,
+      name: l.name,
+      hostName: l.hostName,
+      currentPlayers: l.pilots.size,
+      maxPlayers: l.maxPlayers,
+      wave: l.wave,
+      isPrivate: l.isPrivate,
+      state: l.state
+    }));
+  res.json({ lobbies: publicList });
+});
+
+app.post('/api/lobbies/find-code', (req, res) => {
+  const { code } = req.body;
+  if (!code) return res.status(400).json({ error: 'Code is required' });
+  const cleanCode = String(code).trim().toUpperCase();
+  const match = Array.from(lobbies.values()).find(
+    l => l.code === cleanCode || l.code.replace('VNG-', '') === cleanCode.replace('VNG-', '')
+  );
+  if (!match) {
+    return res.status(404).json({ error: 'Squad room not found. Check the code and try again.' });
+  }
+  if (match.pilots.size >= match.maxPlayers) {
+    return res.status(400).json({ error: 'Squad lobby is already full (max pilots reached).' });
+  }
+  res.json({
+    lobby: {
+      id: match.id,
+      code: match.code,
+      name: match.name,
+      hostName: match.hostName,
+      currentPlayers: match.pilots.size,
+      maxPlayers: match.maxPlayers,
+      isPrivate: match.isPrivate,
+      state: match.state
+    }
+  });
+});
+
 // Dev vs Prod Vite Integration
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
@@ -842,8 +889,11 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server listening on http://0.0.0.0:${PORT}`);
+  const server = http.createServer(app);
+  setupMultiplayer(server);
+
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server with WebSockets listening on http://0.0.0.0:${PORT}`);
   });
 }
 
